@@ -7,6 +7,7 @@ void setup() {
 }
 
 void loop() {
-    Serial.println("Dirección MAC de la ESP32:");
-  Serial.println(WiFi.macAddress());// No hace falta nada en el loop
+  Serial.println("Dirección MAC de la ESP32:");
+  Serial.println(WiFi.macAddress());
+  delay (7000);
 }

@@ -1,49 +1,65 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
+// Estructura que recibe (temperatura)
 typedef struct struct_message {
   float temperature;
 } struct_message;
 
 struct_message incomingData;
 
-// Callback cuando se reciben datos
-void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingDataBytes, int len) {
+// Estructura para enviar comando al emisor
+typedef struct struct_command {
+  bool activarRelay;
+} struct_command;
+
+struct_command cmdData;
+
+// Dirección MAC del emisor (cambiar por la real del emisor)
+uint8_t emisorAddress[] = {0x24, 0x6F, 0x28, 0xYY, 0xYY, 0xYY};
+
+// Callback cuando se recibe temperatura del emisor
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingDataBytes, int len) {
   if (len == sizeof(incomingData)) {
     memcpy(&incomingData, incomingDataBytes, sizeof(incomingData));
 
-    Serial.print("Mensaje recibido de: ");
-    for (int i = 0; i < 6; i++) {
-      Serial.printf("%02X", info->src_addr[i]);
-      if (i < 5) Serial.print(":");
-    }
-    Serial.println();
-
     Serial.print("Temperatura recibida: ");
     Serial.println(incomingData.temperature);
-  } else {
-    Serial.println("Tamaño de datos incorrecto recibido.");
+
+    // Lógica: activar relay si la temperatura supera 25°C
+    if (incomingData.temperature > 25.0) {
+      cmdData.activarRelay = true;
+    } else {
+      cmdData.activarRelay = false;
+    }
+
+    // Mandar comando de vuelta al emisor
+    esp_now_send(emisorAddress, (uint8_t *) &cmdData, sizeof(cmdData));
   }
 }
 
 void setup() {
   Serial.begin(115200);
-
-  // Configurar modo WiFi
   WiFi.mode(WIFI_STA);
-  Serial.print("MAC del receptor: ");
-  Serial.println(WiFi.macAddress());
 
-  // Inicializar ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error iniciando ESP-NOW");
     return;
   }
 
-  // Registrar callback de recepción
   esp_now_register_recv_cb(OnDataRecv);
+
+  esp_now_peer_info_t peerInfo;
+  memcpy(peerInfo.peer_addr, emisorAddress, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Fallo al añadir el peer");
+    return;
+  }
 }
 
 void loop() {
-  // No hace falta nada acá, solo escucha
+  // No hace falta nada, todo funciona con callbacks
 }

@@ -2,77 +2,86 @@
 #include <esp_now.h>
 #include <DHT.h>
 
-#define DHTPIN 4       // Pin del DHT11
-#define DHTTYPE DHT11  // Tipo de sensor
+#define DHTPIN 4     
+#define DHTTYPE DHT11
+#define RELAY_PIN 5   // Pin donde conectas el relay
 
 DHT dht(DHTPIN, DHTTYPE);
 
-// 👉 Cambia esta MAC por la del receptor (ESP32 #2)
-uint8_t receiverMac[] = {0xA0, 0xA3, 0xB3, 0x29, 0x59, 0xA8};
-
-// Estructura de datos a enviar
+// Estructura de datos a enviar (temperatura)
 typedef struct struct_message {
   float temperature;
 } struct_message;
 
 struct_message myData;
 
-// Callback de confirmación de envío
-void OnSent(const esp_now_send_info_t *info, esp_now_send_status_t status) {
-  Serial.print("Mensaje enviado a: ");
-  for (int i = 0; i < 6; i++) {
-    Serial.printf("%02X", info->des_addr[i]);
-    if (i < 5) Serial.print(":");
+// Estructura para recibir comando desde el receptor
+typedef struct struct_command {
+  bool activarRelay;
+} struct_command;
+
+struct_command incomingCmd;
+
+// Dirección MAC del receptor (cambiar por la real del receptor)
+uint8_t receptorAddress[] = {0x24, 0x6F, 0x28, 0xXX, 0xXX, 0xXX};
+
+// Callback cuando se envía
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("Estado del envio: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Exitoso" : "Fallido");
+}
+
+// Callback cuando se recibe
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+  if (len == sizeof(incomingCmd)) {
+    memcpy(&incomingCmd, incomingData, sizeof(incomingCmd));
+    Serial.print("Comando recibido - Activar Relay: ");
+    Serial.println(incomingCmd.activarRelay);
+
+    if (incomingCmd.activarRelay) {
+      digitalWrite(RELAY_PIN, HIGH);  // Enciende relay
+      Serial.println("Relay encendido!");
+    } else {
+      digitalWrite(RELAY_PIN, LOW);   // Apaga relay
+      Serial.println("Relay apagado!");
+    }
   }
-  Serial.print(" -> ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Éxito" : "Fallo");
 }
 
 void setup() {
   Serial.begin(115200);
-  dht.begin();
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);
 
-  // Configurar WiFi en modo estación
+  dht.begin();
   WiFi.mode(WIFI_STA);
 
-  // Inicializar ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error iniciando ESP-NOW");
     return;
   }
 
-  // Registrar callback de envío
-  esp_now_register_send_cb(OnSent);
+  esp_now_register_send_cb(OnDataSent);
+  esp_now_register_recv_cb(OnDataRecv);
 
-  // Configurar peer (receptor)
-  esp_now_peer_info_t peerInfo = {};
-  memcpy(peerInfo.peer_addr, receiverMac, 6);
+  esp_now_peer_info_t peerInfo;
+  memcpy(peerInfo.peer_addr, receptorAddress, 6);
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("Error al agregar el receptor");
+    Serial.println("Fallo al añadir el peer");
     return;
   }
 }
 
 void loop() {
   float temp = dht.readTemperature();
-
-  if (isnan(temp)) {
-    Serial.println("Error leyendo el DHT11");
-    delay(2000);
-    return;
+  if (!isnan(temp)) {
+    myData.temperature = temp;
+    esp_now_send(receptorAddress, (uint8_t *) &myData, sizeof(myData));
+    Serial.print("Temperatura enviada: ");
+    Serial.println(temp);
   }
-
-  myData.temperature = temp;
-
-  // Enviar datos al receptor
-  esp_now_send(receiverMac, (uint8_t *)&myData, sizeof(myData));
-
-  Serial.print("Temperatura enviada: ");
-  Serial.println(myData.temperature);
-
-  delay(3000); // Enviar cada 3 segundos
+  delay(3000);
 }
-
