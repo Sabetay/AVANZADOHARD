@@ -22,27 +22,27 @@ typedef struct struct_command {
 
 struct_command incomingCmd;
 
-// Dirección MAC del receptor (cambiar por la real del receptor)
-uint8_t receptorAddress[] = {0x24, 0x6F, 0x28, 0xXX, 0xXX, 0xXX};
+// Dirección MAC del receptor (cambiar por la real)
+uint8_t receptorAddress[] = {0xC8, 0xF0, 0x9E, 0xF7, 0xF3, 0x5C};
 
-// Callback cuando se envía
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("Estado del envio: ");
+// Callback cuando se envía (nuevo formato IDF v5.x)
+void OnDataSent(const esp_now_send_info_t *info, esp_now_send_status_t status) {
+  Serial.print("Estado del envío: ");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Exitoso" : "Fallido");
 }
 
-// Callback cuando se recibe
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+// Callback cuando se recibe comando desde el receptor
+void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
   if (len == sizeof(incomingCmd)) {
     memcpy(&incomingCmd, incomingData, sizeof(incomingCmd));
     Serial.print("Comando recibido - Activar Relay: ");
     Serial.println(incomingCmd.activarRelay);
 
     if (incomingCmd.activarRelay) {
-      digitalWrite(RELAY_PIN, HIGH);  // Enciende relay
+      digitalWrite(RELAY_PIN, HIGH);  
       Serial.println("Relay encendido!");
     } else {
-      digitalWrite(RELAY_PIN, LOW);   // Apaga relay
+      digitalWrite(RELAY_PIN, LOW);   
       Serial.println("Relay apagado!");
     }
   }
@@ -64,7 +64,7 @@ void setup() {
   esp_now_register_send_cb(OnDataSent);
   esp_now_register_recv_cb(OnDataRecv);
 
-  esp_now_peer_info_t peerInfo;
+  esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, receptorAddress, 6);
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
@@ -82,6 +82,9 @@ void loop() {
     esp_now_send(receptorAddress, (uint8_t *) &myData, sizeof(myData));
     Serial.print("Temperatura enviada: ");
     Serial.println(temp);
+  } else {
+    Serial.println("Error leyendo temperatura");
   }
-  delay(3000);
+
+  delay(7000); // Espera 7 segundos
 }

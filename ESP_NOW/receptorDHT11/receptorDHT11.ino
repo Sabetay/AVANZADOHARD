@@ -1,13 +1,6 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
-// Estructura que recibe (temperatura)
-typedef struct struct_message {
-  float temperature;
-} struct_message;
-
-struct_message incomingData;
-
 // Estructura para enviar comando al emisor
 typedef struct struct_command {
   bool activarRelay;
@@ -15,41 +8,24 @@ typedef struct struct_command {
 
 struct_command cmdData;
 
-// Dirección MAC del emisor (cambiar por la real del emisor)
-uint8_t emisorAddress[] = {0x24, 0x6F, 0x28, 0xYY, 0xYY, 0xYY};
+// Dirección MAC del emisor (cambiar por la real)
+uint8_t emisorAddress[] = {0xA0, 0xA3, 0xB3, 0x29, 0x59, 0xA8};
 
-// Callback cuando se recibe temperatura del emisor
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingDataBytes, int len) {
-  if (len == sizeof(incomingData)) {
-    memcpy(&incomingData, incomingDataBytes, sizeof(incomingData));
-
-    Serial.print("Temperatura recibida: ");
-    Serial.println(incomingData.temperature);
-
-    // Lógica: activar relay si la temperatura supera 25°C
-    if (incomingData.temperature > 25.0) {
-      cmdData.activarRelay = true;
-    } else {
-      cmdData.activarRelay = false;
-    }
-
-    // Mandar comando de vuelta al emisor
-    esp_now_send(emisorAddress, (uint8_t *) &cmdData, sizeof(cmdData));
-  }
-}
+// Pin del botón
+#define BUTTON_PIN 14  
 
 void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // Botón con resistencia interna
 
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error iniciando ESP-NOW");
     return;
   }
 
-  esp_now_register_recv_cb(OnDataRecv);
-
-  esp_now_peer_info_t peerInfo;
+  esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, emisorAddress, 6);
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
@@ -61,5 +37,19 @@ void setup() {
 }
 
 void loop() {
-  // No hace falta nada, todo funciona con callbacks
+  bool buttonState = digitalRead(BUTTON_PIN);
+
+  if (buttonState == LOW) {  
+    // Botón apretado → encender relay
+    cmdData.activarRelay = true;
+    esp_now_send(emisorAddress, (uint8_t *) &cmdData, sizeof(cmdData));
+    Serial.println("Botón presionado → Enviar comando ENCENDER relay");
+    delay(500); // Anti-rebote
+  } else {
+    // Botón suelto → apagar relay
+    cmdData.activarRelay = false;
+    esp_now_send(emisorAddress, (uint8_t *) &cmdData, sizeof(cmdData));
+    Serial.println("Botón liberado → Enviar comando APAGAR relay");
+    delay(500);
+  }
 }
