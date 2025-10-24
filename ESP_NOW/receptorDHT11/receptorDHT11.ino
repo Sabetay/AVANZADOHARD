@@ -138,7 +138,7 @@ void handleTemperature() {
 
 void setup() {
   Serial.begin(115200);
-  WiFi.mode(WIFI_AP);
+  WiFi.mode(WIFI_STA);
 
   // Iniciar ESP-NOW
   if (esp_now_init() != ESP_OK) {

@@ -2,9 +2,9 @@
 #include <esp_now.h>
 #include <DHT.h>
 
-#define DHTPIN 4     
+#define DHTPIN 4
 #define DHTTYPE DHT11
-#define RELAY_PIN 5   // Pin donde conectas el relay
+#define RELAY_PIN 5
 
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -22,16 +22,16 @@ typedef struct struct_command {
 
 struct_command incomingCmd;
 
-// Dirección MAC del receptor (cambiar por la real)
+// Dirección MAC del receptor (manteniendo la actual)
 uint8_t receptorAddress[] = {0xC8, 0xF0, 0x9E, 0xF7, 0xF3, 0x5C};
 
-// Callback cuando se envía (nuevo formato IDF v5.x)
+// Callback al enviar datos
 void OnDataSent(const esp_now_send_info_t *info, esp_now_send_status_t status) {
   Serial.print("Estado del envío: ");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Exitoso" : "Fallido");
 }
 
-// Callback cuando se recibe comando desde el receptor
+// Callback al recibir comandos desde el receptor
 void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
   if (len == sizeof(incomingCmd)) {
     memcpy(&incomingCmd, incomingData, sizeof(incomingCmd));
@@ -39,10 +39,10 @@ void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
     Serial.println(incomingCmd.activarRelay);
 
     if (incomingCmd.activarRelay) {
-      digitalWrite(RELAY_PIN, HIGH);  
+      digitalWrite(RELAY_PIN, HIGH);
       Serial.println("Relay encendido!");
     } else {
-      digitalWrite(RELAY_PIN, LOW);   
+      digitalWrite(RELAY_PIN, LOW);
       Serial.println("Relay apagado!");
     }
   }
@@ -55,6 +55,8 @@ void setup() {
 
   dht.begin();
   WiFi.mode(WIFI_STA);
+  Serial.print("MAC del EMISOR: ");
+  Serial.println(WiFi.macAddress());
 
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error iniciando ESP-NOW");
@@ -66,7 +68,7 @@ void setup() {
 
   esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, receptorAddress, 6);
-  peerInfo.channel = 0;  
+  peerInfo.channel = 0;
   peerInfo.encrypt = false;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
@@ -79,12 +81,12 @@ void loop() {
   float temp = dht.readTemperature();
   if (!isnan(temp)) {
     myData.temperature = temp;
-    esp_now_send(receptorAddress, (uint8_t *) &myData, sizeof(myData));
+    esp_now_send(receptorAddress, (uint8_t *)&myData, sizeof(myData));
     Serial.print("Temperatura enviada: ");
     Serial.println(temp);
   } else {
     Serial.println("Error leyendo temperatura");
   }
 
-  delay(7000); // Espera 7 segundos
+  delay(7000);
 }
